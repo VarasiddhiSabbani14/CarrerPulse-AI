@@ -1,14 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, ArrowUpRight, BriefcaseBusiness, CheckCircle2, FileText, Gauge, GraduationCap, Lightbulb, LoaderCircle, Search, ShieldCheck, Sparkles, UploadCloud } from "lucide-react";
+import { Activity, ArrowUpRight, BriefcaseBusiness, CheckCircle2, FileText, Gauge, Lightbulb, LoaderCircle, Search, ShieldCheck, Sparkles, UploadCloud } from "lucide-react";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
-const demo = {
-  score: 78, word_count: 486, skills: ["python", "react", "sql", "fastapi", "git"],
-  sections: { contact: true, skills: true, education: true, experience: false, projects: true },
-  suggestions: ["Add internship or practical experience if applicable.", "Include measurable outcomes in project descriptions."],
-  top_keywords: ["python", "project", "developed", "react", "data"],
-  disclaimer: "Demo result. Upload your own resume to get a heuristic practice score."
-};
 
 export default function App() {
   const [file, setFile] = useState(null);
@@ -17,6 +10,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [apiOnline, setApiOnline] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
     fetch(API + "/api/health").then(r => setApiOnline(r.ok)).catch(() => setApiOnline(false));
@@ -28,6 +22,24 @@ export default function App() {
     return jobs.map(job => ({ ...job, match: Math.round(job.skills.filter(s => result.skills.includes(s)).length / job.skills.length * 100) }))
       .sort((a, b) => b.match - a.match);
   }, [jobs, result]);
+
+  function chooseFile(candidate) {
+    if (!candidate) return;
+    const extension = candidate.name.toLowerCase().split(".").pop();
+    if (!["pdf", "docx", "txt"].includes(extension)) {
+      setError("Please choose a PDF, DOCX, or TXT file.");
+      setFile(null);
+      return;
+    }
+    if (candidate.size > 5 * 1024 * 1024) {
+      setError("File must be 5 MB or smaller.");
+      setFile(null);
+      return;
+    }
+    setFile(candidate);
+    setError("");
+    setResult(null);
+  }
 
   async function analyze() {
     if (!file) return;
@@ -47,7 +59,7 @@ export default function App() {
     <aside className="sidebar">
       <div className="brand"><div className="brand-mark"><Activity size={21}/></div><span>CareerPulse<span className="brand-ai"> AI</span></span></div>
       <div className="workspace-label">WORKSPACE</div>
-      <a className="nav-item active"><Gauge size={18}/> Overview</a>
+      <a className="nav-item active"> <Gauge size={18}/> Overview</a>
       <a className="nav-item" href="#analysis"><FileText size={18}/> Resume analysis</a>
       <a className="nav-item" href="#jobs"><BriefcaseBusiness size={18}/> Job matches</a>
       <div className="sidebar-bottom"><div className="sidebar-icon"><ShieldCheck size={18}/></div><div><strong>Your career, in focus.</strong><p>Build a stronger next step.</p></div></div>
@@ -70,13 +82,17 @@ export default function App() {
         <div className="panel upload-panel">
           <div className="panel-heading"><div><div className="eyebrow">GET STARTED</div><h2>Resume analysis</h2></div><div className="panel-icon"><UploadCloud/></div></div>
           <p className="muted">Upload your latest resume and get a quick, practical review.</p>
-          <label className="dropzone">
-            <input type="file" accept=".pdf,.docx,.txt" onChange={e => {setFile(e.target.files?.[0] || null);setError("");}}/>
+          <label className={isDragging ? "dropzone dragging" : "dropzone"}
+            onDragEnter={e => {e.preventDefault();setIsDragging(true);}}
+            onDragOver={e => {e.preventDefault();setIsDragging(true);}}
+            onDragLeave={e => {e.preventDefault();if (!e.currentTarget.contains(e.relatedTarget)) setIsDragging(false);}}
+            onDrop={e => {e.preventDefault();setIsDragging(false);chooseFile(e.dataTransfer.files?.[0]);}}>
+            <input type="file" accept=".pdf,.docx,.txt" onChange={e => chooseFile(e.target.files?.[0])}/>
             <div className="upload-symbol"><UploadCloud size={25}/></div>
             <strong>{file ? file.name : "Drop your resume here"}</strong>
             <span>{file ? "Ready to analyze" : "or click to browse · PDF, DOCX, TXT · Max 5 MB"}</span>
           </label>
-          {error && <div className="error-message">{error}</div>}
+          {error && <div className="error-message" role="alert">{error}</div>}
           <button className="primary-button" onClick={analyze} disabled={!file || loading}>{loading ? <LoaderCircle className="spin" size={17}/> : <Sparkles size={17}/>} {loading ? "Analyzing..." : "Analyze my resume"} <ArrowUpRight size={16}/></button>
           <div className="privacy-note"><ShieldCheck size={15}/> Files are processed for this request and not stored by this demo.</div>
         </div>
