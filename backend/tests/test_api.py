@@ -45,6 +45,34 @@ def test_rejects_short_text():
     assert response.status_code == 422
 
 
+def test_rejects_empty_upload():
+    response = client.post(
+        "/api/analyze",
+        files={"file": ("empty.txt", b"", "text/plain")},
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"] == "The uploaded file is empty."
+
+
+def test_corrupt_docx_returns_safe_error():
+    response = client.post(
+        "/api/analyze",
+        files={"file": ("resume.docx", b"not a real document", "application/octet-stream")},
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"] == (
+        "Could not read this file. Please check that it is a valid, unprotected document."
+    )
+
+
+def test_rejects_unsupported_file_type():
+    response = client.post(
+        "/api/analyze",
+        files={"file": ("resume.exe", b"some content", "application/octet-stream")},
+    )
+    assert response.status_code == 415
+
+
 def test_job_list():
     response = client.get("/api/jobs")
     assert response.status_code == 200
