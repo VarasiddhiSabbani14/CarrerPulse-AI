@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Activity, ArrowUpRight, BriefcaseBusiness, CheckCircle2, FileText, Gauge, Lightbulb, LoaderCircle, Search, ShieldCheck, Sparkles, UploadCloud } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Activity, ArrowUpRight, BriefcaseBusiness, CheckCircle2, FileText, Gauge, Lightbulb, LoaderCircle, Search, ShieldCheck, Sparkles, UploadCloud, X } from "lucide-react";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -11,6 +11,7 @@ export default function App() {
   const [error, setError] = useState("");
   const [apiOnline, setApiOnline] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     fetch(API + "/api/health").then(r => setApiOnline(r.ok)).catch(() => setApiOnline(false));
@@ -87,11 +88,12 @@ export default function App() {
             onDragOver={e => {e.preventDefault();setIsDragging(true);}}
             onDragLeave={e => {e.preventDefault();if (!e.currentTarget.contains(e.relatedTarget)) setIsDragging(false);}}
             onDrop={e => {e.preventDefault();setIsDragging(false);chooseFile(e.dataTransfer.files?.[0]);}}>
-            <input type="file" accept=".pdf,.docx,.txt" onChange={e => chooseFile(e.target.files?.[0])}/>
+            <input ref={fileInputRef} type="file" accept=".pdf,.docx,.txt" onChange={e => chooseFile(e.target.files?.[0])}/>
             <div className="upload-symbol"><UploadCloud size={25}/></div>
             <strong>{file ? file.name : "Drop your resume here"}</strong>
             <span>{file ? "Ready to analyze" : "or click to browse · PDF, DOCX, TXT · Max 5 MB"}</span>
           </label>
+          {file && <button className="clear-file-button" type="button" onClick={() => { setFile(null); setResult(null); setError(""); if (fileInputRef.current) fileInputRef.current.value = ""; }}><X size={14}/> Remove selected file</button>}
           {error && <div className="error-message" role="alert">{error}</div>}
           <button className="primary-button" onClick={analyze} disabled={!file || loading}>{loading ? <LoaderCircle className="spin" size={17}/> : <Sparkles size={17}/>} {loading ? "Analyzing..." : "Analyze my resume"} <ArrowUpRight size={16}/></button>
           <div className="privacy-note"><ShieldCheck size={15}/> Files are processed for this request and not stored by this demo.</div>
