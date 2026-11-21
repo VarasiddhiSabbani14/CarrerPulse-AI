@@ -68,7 +68,11 @@ def extract_text(data: bytes, filename: str) -> str:
                     parts.append(" | ".join(cell.text for cell in row.cells))
             return "\n".join(parts)
     except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"Could not read document: {exc}") from exc
+        # Keep parser internals and local file details out of public API responses.
+        raise HTTPException(
+            status_code=422,
+            detail="Could not read this file. Please check that it is a valid, unprotected document.",
+        ) from exc
     raise HTTPException(status_code=415, detail="Upload a PDF, DOCX, or TXT file.")
 
 
@@ -127,6 +131,8 @@ async def analyze(file: UploadFile = File(...)):
     data = await file.read(5 * 1024 * 1024 + 1)
     if len(data) > 5 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="File must be 5 MB or smaller.")
+    if not data:
+        raise HTTPException(status_code=422, detail="The uploaded file is empty.")
     text = extract_text(data, filename)
     if len(text.strip()) < 40:
         raise HTTPException(status_code=422, detail="Not enough readable text found in the document.")
