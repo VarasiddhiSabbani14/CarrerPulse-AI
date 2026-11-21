@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from collections import Counter
 from io import BytesIO
@@ -11,9 +12,17 @@ from pydantic import BaseModel, Field
 
 app = FastAPI(title="CareerPulse AI API", version="0.1.0")
 
+cors_origins = [
+    origin.strip()
+    for origin in os.getenv(
+        "CAREERPULSE_CORS_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173",
+    ).split(",")
+    if origin.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
@@ -29,8 +38,17 @@ STOP_WORDS = {
     "has", "had", "but", "not", "use", "used",
 }
 
+SKILLS_CATALOG = [
+    "python", "java", "javascript", "typescript", "react", "fastapi", "django",
+    "sql", "mysql", "postgresql", "mongodb", "html", "css", "git", "docker",
+    "aws", "azure", "machine learning", "data analysis", "communication",
+    "leadership", "problem solving", "api", "rest",
+]
+
+
 class AnalyzeTextRequest(BaseModel):
     text: str = Field(min_length=40, max_length=100_000)
+
 
 def extract_text(data: bytes, filename: str) -> str:
     suffix = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
@@ -44,21 +62,27 @@ def extract_text(data: bytes, filename: str) -> str:
         if suffix == "docx":
             from docx import Document
             document = Document(BytesIO(data))
-            return "\n".join(p.text for p in document.paragraphs)
+            parts = [paragraph.text for paragraph in document.paragraphs]
+            for table in document.tables:
+                for row in table.rows:
+                    parts.append(" | ".join(cell.text for cell in row.cells))
+            return "\n".join(parts)
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Could not read document: {exc}") from exc
     raise HTTPException(status_code=415, detail="Upload a PDF, DOCX, or TXT file.")
 
+
 def analyze_resume(text: str) -> dict[str, Any]:
     words = re.findall(r"[A-Za-z][A-Za-z+#.]{1,}", text.lower())
     counts = Counter(w for w in words if w not in STOP_WORDS)
-    skills_catalog = [
-        "python", "java", "javascript", "typescript", "react", "fastapi", "django",
-        "sql", "mysql", "postgresql", "mongodb", "html", "css", "git", "docker",
-        "aws", "azure", "machine learning", "data analysis", "communication",
-        "leadership", "problem solving", "api", "rest",
-    ]
-    found = sorted({skill for skill in skills_catalog if skill in text.lower()})
+    normalized_text = text.lower()
+    found = sorted({
+        skill for skill in SKILLS_CATALOG
+        if re.search(
+            rf"(?<![a-z0-9+#]){re.escape(skill)}(?![a-z0-9+#])",
+            normalized_text,
+        )
+    })
     sections = {
         "contact": bool(re.search(r"\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b", text)),
         "skills": bool(re.search(r"\bskills?\b", text, re.I)),
@@ -89,9 +113,11 @@ def analyze_resume(text: str) -> dict[str, Any]:
         "disclaimer": "This is a heuristic practice score, not a real ATS result or hiring prediction.",
     }
 
+
 @app.get("/api/health")
 def health():
     return {"status": "ok", "service": "CareerPulse AI API"}
+
 
 @app.post("/api/analyze")
 async def analyze(file: UploadFile = File(...)):
@@ -106,9 +132,11 @@ async def analyze(file: UploadFile = File(...)):
         raise HTTPException(status_code=422, detail="Not enough readable text found in the document.")
     return analyze_resume(text)
 
+
 @app.post("/api/analyze-text")
 def analyze_text(payload: AnalyzeTextRequest):
     return analyze_resume(payload.text)
+
 
 @app.get("/api/jobs")
 def jobs():
